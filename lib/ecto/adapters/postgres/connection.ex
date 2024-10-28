@@ -213,13 +213,23 @@ if Code.ensure_loaded?(Postgrex) do
       sources = create_names(query, [])
       cte = cte(query, sources)
       {from, name} = get_source(query, sources, 0, source)
+      {comment_before, comment_after} = comment(query, sources)
 
       prefix = prefix || ["UPDATE ", from, " AS ", name | " SET "]
       fields = update_fields(query, sources)
       {join, wheres} = using_join(query, :update_all, "FROM", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
 
-      [cte, prefix, fields, join, where | returning(query, sources)]
+      [
+        comment_before,
+        cte,
+        prefix,
+        fields,
+        join,
+        where,
+        returning(query, sources)
+        | comment_after
+      ]
     end
 
     @impl true
@@ -227,11 +237,23 @@ if Code.ensure_loaded?(Postgrex) do
       sources = create_names(query, [])
       cte = cte(query, sources)
       {from, name} = get_source(query, sources, 0, from)
+      {comment_before, comment_after} = comment(query, sources)
 
       {join, wheres} = using_join(query, :delete_all, "USING", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
 
-      [cte, "DELETE FROM ", from, " AS ", name, join, where | returning(query, sources)]
+      [
+        comment_before,
+        cte,
+        "DELETE FROM ",
+        from,
+        " AS ",
+        name,
+        join,
+        where,
+        returning(query, sources)
+        | comment_after
+      ]
     end
 
     @impl true
