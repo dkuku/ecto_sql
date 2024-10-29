@@ -91,7 +91,7 @@ defmodule Ecto.Adapters.PostgresTest do
       |> comment(^"inter#{"polated"}")
       |> plan()
 
-    assert all(query) =~ "/*comptime*/ /*variable*/ /*interpolated*/"
+    assert all(query) =~ "/*comptime | variable | interpolated*/"
   end
 
   test "with comments in subquery" do
@@ -107,22 +107,14 @@ defmodule Ecto.Adapters.PostgresTest do
       |> plan()
 
     assert all(query) ==
-             ~s'/*query*/ SELECT s0."x" FROM ' <>
-               ~s'(/*subquery*/ SELECT ss0."x" AS "x" FROM "schema" AS ss0) AS s0'
-  end
-
-  test "comments before by default" do
-    query = Schema |> select([r], r.x) |> comment("before") |> plan()
-
-    assert all(query) == ~s'/*before*/ SELECT s0."x" FROM "schema" AS s0'
+             ~s'SELECT s0."x" FROM ' <>
+               ~s'(SELECT ss0."x" AS "x" FROM "schema" AS ss0;/*subquery*/) AS s0;/*query*/'
   end
 
   test "comments after query with settings" do
     query = Schema |> select([r], r.x) |> comment("after") |> plan()
 
-    Application.put_env(:ecto, :comments_position, :after)
-    assert all(query) == ~s'SELECT s0."x" FROM "schema" AS s0 /*after*/'
-    Application.delete_env(:ecto, :comments_position)
+    assert all(query) == ~s'SELECT s0."x" FROM "schema" AS s0;/*after*/'
   end
 
   test "from with hints list" do
