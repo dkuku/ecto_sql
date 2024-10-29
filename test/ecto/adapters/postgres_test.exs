@@ -91,7 +91,7 @@ defmodule Ecto.Adapters.PostgresTest do
       |> comment(^"inter#{"polated"}")
       |> plan()
 
-    assert all(query) =~ "/*comptime*/ /*'variable'*/ /*'interpolated'*/"
+    assert all(query) =~ "/*comptime*/ /*variable*/ /*interpolated*/"
   end
 
   test "with comments in subquery" do
@@ -120,9 +120,9 @@ defmodule Ecto.Adapters.PostgresTest do
   test "comments after query with settings" do
     query = Schema |> select([r], r.x) |> comment("after") |> plan()
 
-    Application.put_env(:ecto_sql, :comments_position, :after)
+    Application.put_env(:ecto, :comments_position, :after)
     assert all(query) == ~s'SELECT s0."x" FROM "schema" AS s0 /*after*/'
-    Application.delete_env(:ecto_sql, :comments_position)
+    Application.delete_env(:ecto, :comments_position)
   end
 
   test "from with hints list" do

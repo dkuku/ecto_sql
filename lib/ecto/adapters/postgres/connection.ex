@@ -906,21 +906,21 @@ if Code.ensure_loaded?(Postgrex) do
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
 
-    defp comments_position, do: Application.get_env(:ecto_sql, :comments_position, :before)
+    defp comments_position, do: Application.get_env(:ecto, :comments_position, :before)
     defp get_comment_delimiters(:before), do: {"/*", "*/ "}
     defp get_comment_delimiters(:after), do: {" /*", "*/"}
 
-    defp comment(%{comments: comments}, sources) do
+    defp comment(%{comments: comments}, _sources) do
       comments_position = comments_position()
       {opening_delimiter, closinig_delimiter} = get_comment_delimiters(comments_position)
 
       {comments, _} =
-        Enum.map_reduce(comments, _safe = true, fn
-          comment, acc when is_binary(comment) ->
-            {[opening_delimiter, comment, closinig_delimiter], acc}
+        Enum.map_reduce(comments, _cacheable = true, fn
+          comment, cacheable when is_binary(comment) ->
+            {[opening_delimiter, comment, closinig_delimiter], cacheable}
 
-          %CommentExpr{expr: expr} = query, _acc ->
-            {[opening_delimiter, expr(expr, sources, query), closinig_delimiter], false}
+          %CommentExpr{expr: expr, cacheable: current_cacheable}, cacheable ->
+            {[opening_delimiter, expr, closinig_delimiter], cacheable and current_cacheable}
         end)
 
       case comments_position do
