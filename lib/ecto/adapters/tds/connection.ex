@@ -153,7 +153,7 @@ if Code.ensure_loaded?(Tds) do
 
     @parent_as __MODULE__
     alias Ecto.Query
-    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr}
+    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr, CommentExpr}
 
     @impl true
     def all(query, as_prefix \\ []) do
@@ -172,11 +172,25 @@ if Code.ensure_loaded?(Tds) do
       # limit = is handled in select (TOP X)
       offset = offset(query, sources)
       lock = lock(query, sources)
+      comment = comment(query)
 
       if query.offset != nil and query.order_bys == [],
         do: error!(query, "ORDER BY is mandatory when OFFSET is set")
 
-      [cte, select, from, join, where, group_by, having, combinations, order_by, lock | offset]
+      [
+        cte,
+        select,
+        from,
+        join,
+        where,
+        group_by,
+        having,
+        combinations,
+        order_by,
+        lock,
+        offset
+        | comment
+      ]
     end
 
     @impl true
@@ -200,7 +214,8 @@ if Code.ensure_loaded?(Tds) do
         returning(query, 0, "INSERTED"),
         from,
         join,
-        where | lock
+        where
+        | lock
       ]
     end
 
@@ -661,6 +676,18 @@ if Code.ensure_loaded?(Tds) do
     defp lock(%{lock: nil}, _sources), do: []
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [" OPTION (", binary, ?)]
     defp lock(%{lock: expr} = query, sources), do: [" OPTION (", expr(expr, sources, query), ?)]
+
+    defp comment(%{comments: []}), do: []
+
+    defp comment(%{comments: comments}) do
+      comment =
+        Enum.map_join(comments, " | ", fn
+          comment when is_binary(comment) -> comment
+          %CommentExpr{expr: expr} -> expr
+        end)
+
+      [";/*", comment, "*/"]
+    end
 
     defp combinations(%{combinations: combinations}, as_prefix) do
       Enum.map(combinations, fn

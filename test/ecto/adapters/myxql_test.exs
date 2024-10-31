@@ -2268,12 +2268,51 @@ defmodule Ecto.Adapters.MyXQLTest do
            ]
   end
 
-  # Unsupported types and clauses
+  describe "comments" do
+    test "comments appended after query" do
+      query = Schema |> select([r], r.x) |> comment("after") |> plan()
 
-  test "arrays" do
-    assert_raise Ecto.QueryError, ~r"Array type is not supported by MySQL", fn ->
-      query = Schema |> select([], fragment("?", [1, 2, 3])) |> plan()
-      all(query)
+      assert all(query) == ~s'SELECT s0.`x` FROM `schema` AS s0;/*after*/'
+    end
+
+    test "with multiple comments" do
+      variable = "variable"
+
+      query =
+        Schema
+        |> select([r], r.x)
+        |> comment("comptime")
+        |> comment(^variable)
+        |> comment(^"inter#{"polated"}")
+        |> plan()
+
+      assert all(query) =~ "/*comptime | variable | interpolated*/"
+    end
+
+    test "with comments in subquery" do
+      subquery =
+        Schema
+        |> select([r], r.x)
+        |> comment("subquery")
+
+      query =
+        subquery(subquery)
+        |> select([r], r.x)
+        |> comment("query")
+        |> plan()
+
+      assert all(query) ==
+               ~s'SELECT s0.`x` FROM ' <>
+                 ~s'(SELECT ss0.`x` AS `x` FROM `schema` AS ss0;/*subquery*/) AS s0;/*query*/'
+    end
+
+    # Unsupported types and clauses
+
+    test "arrays" do
+      assert_raise Ecto.QueryError, ~r"Array type is not supported by MySQL", fn ->
+        query = Schema |> select([], fragment("?", [1, 2, 3])) |> plan()
+        all(query)
+      end
     end
   end
 

@@ -99,7 +99,7 @@ if Code.ensure_loaded?(MyXQL) do
     ## Query
 
     @parent_as __MODULE__
-    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr}
+    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr, CommentExpr}
 
     @impl true
     def all(query, as_prefix \\ []) do
@@ -118,6 +118,7 @@ if Code.ensure_loaded?(MyXQL) do
       limit = limit(query, sources)
       offset = offset(query, sources)
       lock = lock(query, sources)
+      comment = comment(query)
 
       [
         cte,
@@ -131,7 +132,9 @@ if Code.ensure_loaded?(MyXQL) do
         combinations,
         order_by,
         limit,
-        offset | lock
+        offset,
+        lock
+        | comment
       ]
     end
 
@@ -619,6 +622,18 @@ if Code.ensure_loaded?(MyXQL) do
     defp lock(%{lock: nil}, _sources), do: []
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
+
+    defp comment(%{comments: []}), do: []
+
+    defp comment(%{comments: comments}) do
+      comment =
+        Enum.map_join(comments, " | ", fn
+          comment when is_binary(comment) -> comment
+          %CommentExpr{expr: expr} -> expr
+        end)
+
+      [";/*", comment, "*/"]
+    end
 
     defp boolean(_name, [], _sources, _query), do: []
 

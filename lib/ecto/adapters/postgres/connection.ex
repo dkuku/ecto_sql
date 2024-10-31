@@ -173,7 +173,6 @@ if Code.ensure_loaded?(Postgrex) do
     def all(query, as_prefix \\ []) do
       sources = create_names(query, as_prefix)
       {select_distinct, order_by_distinct} = distinct(query.distinct, sources, query)
-      comment = comment(query, sources)
 
       cte = cte(query, sources)
       from = from(query, sources)
@@ -188,6 +187,7 @@ if Code.ensure_loaded?(Postgrex) do
       limit = limit(query, sources)
       offset = offset(query, sources)
       lock = lock(query, sources)
+      comment = comment(query)
 
       [
         cte,
@@ -212,12 +212,12 @@ if Code.ensure_loaded?(Postgrex) do
       sources = create_names(query, [])
       cte = cte(query, sources)
       {from, name} = get_source(query, sources, 0, source)
-      comment = comment(query, sources)
 
       prefix = prefix || ["UPDATE ", from, " AS ", name | " SET "]
       fields = update_fields(query, sources)
       {join, wheres} = using_join(query, :update_all, "FROM", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
+      comment = comment(query)
 
       [
         cte,
@@ -235,10 +235,10 @@ if Code.ensure_loaded?(Postgrex) do
       sources = create_names(query, [])
       cte = cte(query, sources)
       {from, name} = get_source(query, sources, 0, from)
-      comment = comment(query, sources)
 
       {join, wheres} = using_join(query, :delete_all, "USING", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
+      comment = comment(query)
 
       [
         cte,
@@ -903,9 +903,9 @@ if Code.ensure_loaded?(Postgrex) do
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
 
-    defp comment(%{comments: []}, _sources), do: []
+    defp comment(%{comments: []}), do: []
 
-    defp comment(%{comments: comments}, _sources) do
+    defp comment(%{comments: comments}) do
       comment =
         Enum.map_join(comments, " | ", fn
           comment when is_binary(comment) -> comment

@@ -2051,6 +2051,45 @@ defmodule Ecto.Adapters.TdsTest do
     end
   end
 
+  describe "comments" do
+    test "comments appended after query" do
+      query = Schema |> select([r], r.x) |> comment("after") |> plan()
+
+      assert all(query) == ~s'SELECT s0.[x] FROM [schema] AS s0;/*after*/'
+    end
+
+    test "with multiple comments" do
+      variable = "variable"
+
+      query =
+        Schema
+        |> select([r], r.x)
+        |> comment("comptime")
+        |> comment(^variable)
+        |> comment(^"inter#{"polated"}")
+        |> plan()
+
+      assert all(query) =~ "/*comptime | variable | interpolated*/"
+    end
+
+    test "with comments in subquery" do
+      subquery =
+        Schema
+        |> select([r], r.x)
+        |> comment("subquery")
+
+      query =
+        subquery(subquery)
+        |> select([r], r.x)
+        |> comment("query")
+        |> plan()
+
+      assert all(query) ==
+               ~s'SELECT s0.[x] FROM ' <>
+                 ~s'(SELECT ss0.[x] AS [x] FROM [schema] AS ss0;/*subquery*/) AS s0;/*query*/'
+    end
+  end
+
   defp remove_newlines(string) when is_binary(string) do
     string |> String.trim() |> String.replace("\n", " ")
   end
