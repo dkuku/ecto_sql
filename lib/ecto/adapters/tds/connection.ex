@@ -204,6 +204,7 @@ if Code.ensure_loaded?(Tds) do
       join = join(query, sources)
       where = where(query, sources)
       lock = lock(query, sources)
+      comment = comment(query)
 
       [
         cte,
@@ -214,8 +215,9 @@ if Code.ensure_loaded?(Tds) do
         returning(query, 0, "INSERTED"),
         from,
         join,
-        where
-        | lock
+        where,
+        lock
+        | comment
       ]
     end
 
@@ -230,8 +232,18 @@ if Code.ensure_loaded?(Tds) do
       join = join(query, sources)
       where = where(query, sources)
       lock = lock(query, sources)
+      comment = comment(query)
 
-      [cte, delete, returning(query, 0, "DELETED"), from, join, where | lock]
+      [
+        cte,
+        delete,
+        returning(query, 0, "DELETED"),
+        from,
+        join,
+        where,
+        lock
+        | comment
+      ]
     end
 
     @impl true

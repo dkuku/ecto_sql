@@ -3006,6 +3006,18 @@ defmodule Ecto.Adapters.PostgresTest do
                ~s'SELECT s0."x" FROM ' <>
                  ~s'(SELECT ss0."x" AS "x" FROM "schema" AS ss0;/*subquery*/) AS s0;/*query*/'
     end
+
+    test "comments in delete_all" do
+      query = Schema |> select([r], r.x) |> comment("after") |> plan()
+
+      assert delete_all(query) ==
+               ~s'DELETE FROM "schema" AS s0 RETURNING s0."x";/*after*/'
+    end
+
+    test "comments in update_all" do
+      query = from(m in Schema, update: [set: [x: 0]]) |> comment("after") |> plan(:update_all)
+      assert update_all(query) == ~s{UPDATE "schema" AS s0 SET "x" = 0;/*after*/}
+    end
   end
 
   defp make_result(level) do

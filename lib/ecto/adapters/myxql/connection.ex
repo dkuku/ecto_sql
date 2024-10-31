@@ -160,8 +160,9 @@ if Code.ensure_loaded?(MyXQL) do
       {join, wheres} = using_join(query, :update_all, sources)
       prefix = prefix || ["UPDATE ", from, " AS ", name, join, " SET "]
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
+      comment = comment(query)
 
-      [cte, prefix, fields | where]
+      [cte, prefix, fields, where | comment]
     end
 
     @impl true
@@ -177,8 +178,9 @@ if Code.ensure_loaded?(MyXQL) do
       from = from(query, sources)
       join = join(query, sources)
       where = where(query, sources)
+      comment = comment(query)
 
-      [cte, "DELETE ", name, ".*", from, join | where]
+      [cte, "DELETE ", name, ".*", from, join, where | comment]
     end
 
     @impl true
@@ -191,7 +193,8 @@ if Code.ensure_loaded?(MyXQL) do
         " (",
         fields,
         ") ",
-        insert_all(rows) | on_conflict(on_conflict, header)
+        insert_all(rows),
+        on_conflict(on_conflict, header)
       ]
     end
 

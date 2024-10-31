@@ -2306,13 +2306,25 @@ defmodule Ecto.Adapters.MyXQLTest do
                  ~s'(SELECT ss0.`x` AS `x` FROM `schema` AS ss0;/*subquery*/) AS s0;/*query*/'
     end
 
-    # Unsupported types and clauses
+    test "comments in delete_all" do
+      query = Schema |> comment("after") |> plan()
 
-    test "arrays" do
-      assert_raise Ecto.QueryError, ~r"Array type is not supported by MySQL", fn ->
-        query = Schema |> select([], fragment("?", [1, 2, 3])) |> plan()
-        all(query)
-      end
+      assert delete_all(query) ==
+               ~s'DELETE s0.* FROM `schema` AS s0;/*after*/'
+    end
+
+    test "comments in update_all" do
+      query = from(m in Schema, update: [set: [x: 0]]) |> comment("after") |> plan(:update_all)
+      assert update_all(query) == ~s{UPDATE `schema` AS s0 SET s0.`x` = 0;/*after*/}
+    end
+  end
+
+  # Unsupported types and clauses
+
+  test "arrays" do
+    assert_raise Ecto.QueryError, ~r"Array type is not supported by MySQL", fn ->
+      query = Schema |> select([], fragment("?", [1, 2, 3])) |> plan()
+      all(query)
     end
   end
 
