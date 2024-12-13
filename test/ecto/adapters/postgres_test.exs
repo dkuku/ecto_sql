@@ -2987,7 +2987,7 @@ defmodule Ecto.Adapters.PostgresTest do
         |> comment(^"inter#{"polated"}")
         |> plan()
 
-      assert all(query) =~ "/*comptime | variable | interpolated*/"
+      assert all(query) =~ "/*comptime\nvariable\ninterpolated*/"
     end
 
     test "with comments in subquery" do
@@ -3015,6 +3015,12 @@ defmodule Ecto.Adapters.PostgresTest do
     end
 
     test "comments in update_all" do
+      query = from(m in Schema, update: [set: [x: 0]]) |> comment("after") |> plan(:update_all)
+      assert update_all(query) == ~s{UPDATE "schema" AS s0 SET "x" = 0;/*after*/}
+    end
+
+    test "comments before query" do
+      Application.put_env(:ecto_sql, :comments_position, :before)
       query = from(m in Schema, update: [set: [x: 0]]) |> comment("after") |> plan(:update_all)
       assert update_all(query) == ~s{UPDATE "schema" AS s0 SET "x" = 0;/*after*/}
     end

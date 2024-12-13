@@ -187,9 +187,10 @@ if Code.ensure_loaded?(Postgrex) do
       limit = limit(query, sources)
       offset = offset(query, sources)
       lock = lock(query, sources)
-      comment = comment(query)
+      {comment_before, comment_after} = comment(query)
 
       [
+        comment_before,
         cte,
         select,
         from,
@@ -203,7 +204,7 @@ if Code.ensure_loaded?(Postgrex) do
         limit,
         offset,
         lock
-        | comment
+        | comment_after
       ]
     end
 
@@ -217,16 +218,17 @@ if Code.ensure_loaded?(Postgrex) do
       fields = update_fields(query, sources)
       {join, wheres} = using_join(query, :update_all, "FROM", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
-      comment = comment(query)
+      {comment_before, comment_after} = comment(query)
 
       [
+        comment_before,
         cte,
         prefix,
         fields,
         join,
         where,
         returning(query, sources)
-        | comment
+        | comment_after
       ]
     end
 
@@ -238,9 +240,10 @@ if Code.ensure_loaded?(Postgrex) do
 
       {join, wheres} = using_join(query, :delete_all, "USING", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
-      comment = comment(query)
+      {comment_before, comment_after} = comment(query)
 
       [
+        comment_before,
         cte,
         "DELETE FROM ",
         from,
@@ -249,7 +252,7 @@ if Code.ensure_loaded?(Postgrex) do
         join,
         where,
         returning(query, sources)
-        | comment
+        | comment_after
       ]
     end
 
@@ -903,17 +906,24 @@ if Code.ensure_loaded?(Postgrex) do
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
 
-    defp comment(%{comments: []}), do: []
+    defp comment(%{comments: []}), do: {[], []}
 
     defp comment(%{comments: comments}) do
       comment =
-        Enum.map_join(comments, " | ", fn
+        Enum.map_intersperse(comments, comments_separator(), fn
           comment when is_binary(comment) -> comment
           %CommentExpr{expr: expr} -> expr
         end)
 
-      [";/*", comment, "*/"]
+      if comments_position() == :before do
+        {["/*", comment, "*/\n"], []}
+      else
+        {[], [";/*", comment, "*/"]}
+      end
     end
+
+    defp comments_position, do: Application.get_env(:ecto, :comments_position, :after)
+    defp comments_separator, do: Application.get_env(:ecto, :comments_divider, "\n")
 
     defp boolean(_name, [], _sources, _query), do: []
 

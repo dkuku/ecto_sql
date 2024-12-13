@@ -118,9 +118,10 @@ if Code.ensure_loaded?(MyXQL) do
       limit = limit(query, sources)
       offset = offset(query, sources)
       lock = lock(query, sources)
-      comment = comment(query)
+      {comment_before, comment_after} = comment(query)
 
       [
+        comment_before,
         cte,
         select,
         from,
@@ -134,7 +135,7 @@ if Code.ensure_loaded?(MyXQL) do
         limit,
         offset,
         lock
-        | comment
+        | comment_after
       ]
     end
 
@@ -160,9 +161,9 @@ if Code.ensure_loaded?(MyXQL) do
       {join, wheres} = using_join(query, :update_all, sources)
       prefix = prefix || ["UPDATE ", from, " AS ", name, join, " SET "]
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
-      comment = comment(query)
+      {comment_before, comment_after} = comment(query)
 
-      [cte, prefix, fields, where | comment]
+      [comment_before, cte, prefix, fields, where | comment_after]
     end
 
     @impl true
@@ -178,9 +179,9 @@ if Code.ensure_loaded?(MyXQL) do
       from = from(query, sources)
       join = join(query, sources)
       where = where(query, sources)
-      comment = comment(query)
+      {comment_before, comment_after} = comment(query)
 
-      [cte, "DELETE ", name, ".*", from, join, where | comment]
+      [comment_before, cte, "DELETE ", name, ".*", from, join, where | comment_after]
     end
 
     @impl true
@@ -626,17 +627,24 @@ if Code.ensure_loaded?(MyXQL) do
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
 
-    defp comment(%{comments: []}), do: []
+    defp comment(%{comments: []}), do: {[], []}
 
     defp comment(%{comments: comments}) do
       comment =
-        Enum.map_join(comments, " | ", fn
+        Enum.map_intersperse(comments, comments_separator(), fn
           comment when is_binary(comment) -> comment
           %CommentExpr{expr: expr} -> expr
         end)
 
-      [";/*", comment, "*/"]
+      if comments_position() == :before do
+        {["/*", comment, "*/\n"], []}
+      else
+        {[], [";/*", comment, "*/"]}
+      end
     end
+
+    defp comments_position, do: Application.get_env(:ecto, :comments_position, :after)
+    defp comments_separator, do: Application.get_env(:ecto, :comments_divider, "\n")
 
     defp boolean(_name, [], _sources, _query), do: []
 

@@ -2069,7 +2069,7 @@ defmodule Ecto.Adapters.TdsTest do
         |> comment(^"inter#{"polated"}")
         |> plan()
 
-      assert all(query) =~ "/*comptime | variable | interpolated*/"
+      assert all(query) =~ "/*comptime\nvariable\ninterpolated*/"
     end
 
     test "with comments in subquery" do
