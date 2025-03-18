@@ -187,8 +187,10 @@ if Code.ensure_loaded?(Postgrex) do
       limit = limit(query, sources)
       offset = offset(query, sources)
       lock = lock(query, sources)
+      comment = comment(query)
 
       [
+        comment,
         cte,
         select,
         from,
@@ -200,7 +202,8 @@ if Code.ensure_loaded?(Postgrex) do
         combinations,
         order_by,
         limit,
-        offset | lock
+        offset
+        | lock
       ]
     end
 
@@ -214,8 +217,17 @@ if Code.ensure_loaded?(Postgrex) do
       fields = update_fields(query, sources)
       {join, wheres} = using_join(query, :update_all, "FROM", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
+      comment = comment(query)
 
-      [cte, prefix, fields, join, where | returning(query, sources)]
+      [
+        comment,
+        cte,
+        prefix,
+        fields,
+        join,
+        where
+        | returning(query, sources)
+      ]
     end
 
     @impl true
@@ -226,8 +238,19 @@ if Code.ensure_loaded?(Postgrex) do
 
       {join, wheres} = using_join(query, :delete_all, "USING", sources)
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
+      comment = comment(query)
 
-      [cte, "DELETE FROM ", from, " AS ", name, join, where | returning(query, sources)]
+      [
+        comment,
+        cte,
+        "DELETE FROM ",
+        from,
+        " AS ",
+        name,
+        join,
+        where
+        | returning(query, sources)
+      ]
     end
 
     @impl true
@@ -879,6 +902,17 @@ if Code.ensure_loaded?(Postgrex) do
     defp lock(%{lock: nil}, _sources), do: []
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
+
+    defp comment(%{comments: []}), do: []
+
+    defp comment(%{comments: comments}) do
+      comment =
+        Enum.map_intersperse(comments, ",", fn
+          comment when is_binary(comment) -> comment
+        end)
+
+      ["/*", comment, "*/\n"]
+    end
 
     defp boolean(_name, [], _sources, _query), do: []
 

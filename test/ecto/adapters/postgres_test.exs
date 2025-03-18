@@ -2985,6 +2985,57 @@ defmodule Ecto.Adapters.PostgresTest do
     assert SQL.ddl_logs(result) == [{:error, ~s(table "foo" exists, skipping), []}]
   end
 
+  describe "comments" do
+    test "comments before query" do
+      query =
+        from(m in Schema, update: [set: [x: 0]])
+        |> comment("comment before query")
+        |> plan(:update_all)
+
+      assert update_all(query) == ~s{/*comment before query*/\nUPDATE "schema" AS s0 SET "x" = 0}
+    end
+
+    test "with multiple comments" do
+      query =
+        Schema
+        |> select([r], r.x)
+        |> comment("comptime")
+        |> comment(:atom)
+        |> plan()
+
+      assert all(query) =~ "/*comptime,atom*/"
+    end
+
+    test "with comments in subquery" do
+      subquery =
+        Schema
+        |> select([r], r.x)
+        |> comment("subquery")
+
+      query =
+        subquery(subquery)
+        |> select([r], r.x)
+        |> comment("query")
+        |> plan()
+
+      assert all(query) ==
+               ~s'/*query*/\nSELECT s0."x" FROM ' <>
+                 ~s'(/*subquery*/\nSELECT ss0."x" AS "x" FROM "schema" AS ss0 AS s0;'
+    end
+
+    test "comments in delete_all" do
+      query = Schema |> select([r], r.x) |> comment("comment") |> plan()
+
+      assert delete_all(query) ==
+               ~s'/*comment*/\nDELETE FROM "schema" AS s0 RETURNING s0."x"'
+    end
+
+    test "comments in update_all" do
+      query = from(m in Schema, update: [set: [x: 0]]) |> comment("comment") |> plan(:update_all)
+      assert update_all(query) == ~s{/*comment*/\nUPDATE "schema" AS s0 SET "x" = 0}
+    end
+  end
+
   defp make_result(level) do
     %Postgrex.Result{
       messages: [
