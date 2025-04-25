@@ -2067,6 +2067,56 @@ defmodule Ecto.Adapters.TdsTest do
     end
   end
 
+  describe "comments" do
+    test "comments appended after query" do
+      query = Schema |> select([r], r.x) |> comment("after") |> plan()
+
+      assert all(query) == ~s'SELECT s0.[x] FROM [schema] AS s0;/*after*/'
+    end
+
+    test "with multiple comments" do
+      variable = "variable"
+
+      query =
+        Schema
+        |> select([r], r.x)
+        |> comment("comptime")
+        |> comment(^variable)
+        |> comment(^"inter#{"polated"}")
+        |> plan()
+
+      assert all(query) =~ "/*comptime\nvariable\ninterpolated*/"
+    end
+
+    test "with comments in subquery" do
+      subquery =
+        Schema
+        |> select([r], r.x)
+        |> comment("subquery")
+
+      query =
+        subquery(subquery)
+        |> select([r], r.x)
+        |> comment("query")
+        |> plan()
+
+      assert all(query) ==
+               ~s'SELECT s0.[x] FROM ' <>
+                 ~s'(SELECT ss0.[x] AS [x] FROM [schema] AS ss0;/*subquery*/) AS s0;/*query*/'
+    end
+
+    test "comments in delete_all" do
+      query = Schema |> select([r], r.x) |> comment("after") |> plan()
+
+      assert delete_all(query) == ~s'DELETE s0 OUTPUT DELETED.[x] FROM [schema] AS s0;/*after*/'
+    end
+
+    test "comments in update_all" do
+      query = from(m in Schema, update: [set: [x: 0]]) |> comment("after") |> plan(:update_all)
+      assert update_all(query) == ~s{UPDATE s0 SET s0.[x] = 0 FROM [schema] AS s0;/*after*/}
+    end
+  end
+
   defp remove_newlines(string) when is_binary(string) do
     string |> String.trim() |> String.replace("\n", " ")
   end
