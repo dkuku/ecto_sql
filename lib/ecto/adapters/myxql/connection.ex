@@ -99,7 +99,7 @@ if Code.ensure_loaded?(MyXQL) do
     ## Query
 
     @parent_as __MODULE__
-    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr}
+    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr, CommentExpr}
 
     @impl true
     def all(query, as_prefix \\ []) do
@@ -118,8 +118,10 @@ if Code.ensure_loaded?(MyXQL) do
       limit = limit(query, sources)
       offset = offset(query, sources)
       lock = lock(query, sources)
+      {comment_before, comment_after} = comment(query)
 
       [
+        comment_before,
         cte,
         select,
         from,
@@ -131,7 +133,9 @@ if Code.ensure_loaded?(MyXQL) do
         combinations,
         order_by,
         limit,
-        offset | lock
+        offset,
+        lock
+        | comment_after
       ]
     end
 
@@ -157,8 +161,9 @@ if Code.ensure_loaded?(MyXQL) do
       {join, wheres} = using_join(query, :update_all, sources)
       prefix = prefix || ["UPDATE ", from, " AS ", name, join, " SET "]
       where = where(%{query | wheres: wheres ++ query.wheres}, sources)
+      {comment_before, comment_after} = comment(query)
 
-      [cte, prefix, fields | where]
+      [comment_before, cte, prefix, fields, where | comment_after]
     end
 
     @impl true
@@ -174,8 +179,9 @@ if Code.ensure_loaded?(MyXQL) do
       from = from(query, sources)
       join = join(query, sources)
       where = where(query, sources)
+      {comment_before, comment_after} = comment(query)
 
-      [cte, "DELETE ", name, ".*", from, join | where]
+      [comment_before, cte, "DELETE ", name, ".*", from, join, where | comment_after]
     end
 
     @impl true
@@ -188,7 +194,8 @@ if Code.ensure_loaded?(MyXQL) do
         " (",
         fields,
         ") ",
-        insert_all(rows) | on_conflict(on_conflict, header)
+        insert_all(rows),
+        on_conflict(on_conflict, header)
       ]
     end
 
@@ -619,6 +626,25 @@ if Code.ensure_loaded?(MyXQL) do
     defp lock(%{lock: nil}, _sources), do: []
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [?\s | binary]
     defp lock(%{lock: expr} = query, sources), do: [?\s | expr(expr, sources, query)]
+
+    defp comment(%{comments: []}), do: {[], []}
+
+    defp comment(%{comments: comments}) do
+      comment =
+        Enum.map_intersperse(comments, comments_separator(), fn
+          comment when is_binary(comment) -> comment
+          %CommentExpr{expr: expr} -> expr
+        end)
+
+      if comments_position() == :before do
+        {["/*", comment, "*/\n"], []}
+      else
+        {[], [";/*", comment, "*/"]}
+      end
+    end
+
+    defp comments_position, do: Application.get_env(:ecto, :comments_position, :after)
+    defp comments_separator, do: Application.get_env(:ecto, :comments_divider, "\n")
 
     defp boolean(_name, [], _sources, _query), do: []
 

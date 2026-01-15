@@ -153,7 +153,7 @@ if Code.ensure_loaded?(Tds) do
 
     @parent_as __MODULE__
     alias Ecto.Query
-    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr}
+    alias Ecto.Query.{BooleanExpr, ByExpr, JoinExpr, QueryExpr, WithExpr, CommentExpr}
 
     @impl true
     def all(query, as_prefix \\ []) do
@@ -172,11 +172,26 @@ if Code.ensure_loaded?(Tds) do
       # limit = is handled in select (TOP X)
       offset = offset(query, sources)
       lock = lock(query, sources)
+      {comment_before, comment_after} = comment(query)
 
       if query.offset != nil and query.order_bys == [],
         do: error!(query, "ORDER BY is mandatory when OFFSET is set")
 
-      [cte, select, from, join, where, group_by, having, combinations, order_by, lock | offset]
+      [
+        comment_before,
+        cte,
+        select,
+        from,
+        join,
+        where,
+        group_by,
+        having,
+        combinations,
+        order_by,
+        lock,
+        offset
+        | comment_after
+      ]
     end
 
     @impl true
@@ -190,8 +205,10 @@ if Code.ensure_loaded?(Tds) do
       join = join(query, sources)
       where = where(query, sources)
       lock = lock(query, sources)
+      {comment_before, comment_after} = comment(query)
 
       [
+        comment_before,
         cte,
         "UPDATE ",
         name,
@@ -200,7 +217,9 @@ if Code.ensure_loaded?(Tds) do
         returning(query, 0, "INSERTED"),
         from,
         join,
-        where | lock
+        where,
+        lock
+        | comment_after
       ]
     end
 
@@ -215,8 +234,19 @@ if Code.ensure_loaded?(Tds) do
       join = join(query, sources)
       where = where(query, sources)
       lock = lock(query, sources)
+      {comment_before, comment_after} = comment(query)
 
-      [cte, delete, returning(query, 0, "DELETED"), from, join, where | lock]
+      [
+        comment_before,
+        cte,
+        delete,
+        returning(query, 0, "DELETED"),
+        from,
+        join,
+        where,
+        lock
+        | comment_after
+      ]
     end
 
     @impl true
@@ -661,6 +691,25 @@ if Code.ensure_loaded?(Tds) do
     defp lock(%{lock: nil}, _sources), do: []
     defp lock(%{lock: binary}, _sources) when is_binary(binary), do: [" OPTION (", binary, ?)]
     defp lock(%{lock: expr} = query, sources), do: [" OPTION (", expr(expr, sources, query), ?)]
+
+    defp comment(%{comments: []}), do: {[], []}
+
+    defp comment(%{comments: comments}) do
+      comment =
+        Enum.map_intersperse(comments, comments_separator(), fn
+          comment when is_binary(comment) -> comment
+          %CommentExpr{expr: expr} -> expr
+        end)
+
+      if comments_position() == :before do
+        {["/*", comment, "*/\n"], []}
+      else
+        {[], [";/*", comment, "*/"]}
+      end
+    end
+
+    defp comments_position, do: Application.get_env(:ecto, :comments_position, :after)
+    defp comments_separator, do: Application.get_env(:ecto, :comments_divider, "\n")
 
     defp combinations(%{combinations: combinations}, as_prefix) do
       Enum.map(combinations, fn
